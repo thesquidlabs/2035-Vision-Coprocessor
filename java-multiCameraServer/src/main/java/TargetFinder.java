@@ -21,16 +21,10 @@ import org.opencv.objdetect.*;
 import java.util.Vector;
 
 public class TargetFinder{
-    public void ProcessImage(Mat camera_frame, List<MatOfPoint> contours){
-        
-        for (int i = 0; i < contours.size(); i++){}
-            if (contours[i] > 
-        }
-    }
-
-    public void contour_center_width(contour){
+    
+    public void contour_center_width(MatOfPoint contour){
         Rect r = Imgproc.boundingRect(camera_frame.filterContoursOutput().get(0));
-        x, y, w, h = cv2.boundingRect(contour)
+        x, y, w, h = cv2.boundingRect(contour);
     }
     public void computeOutputValues(Mat rvec, Mat tvec){
         /*
@@ -44,11 +38,11 @@ public class TargetFinder{
                   \ |
           distance \
                     \__ |
-                     \a2| 
-                      \ |                    
+                     \a2|
+                      \ |
                      ╔══════╗
                      ║target║
-                     ╚══════╝     
+                     ╚══════╝
         
         */
         
@@ -66,6 +60,6 @@ public class TargetFinder{
         Calib3d.Rodrigues(rvec, rot);
         Mat rot_inv = rot.t();
         Mat pzero_world = tvec* rot_inv;
-        Calib3d.solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+        //Calib3d.solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
     }
   }

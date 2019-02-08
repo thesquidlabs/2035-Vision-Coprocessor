@@ -13,17 +13,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import javax.lang.model.util.ElementScanner6;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.sun.tools.javac.code.Attribute.Array;
 
 import org.opencv.calib3d.Calib3d;
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfPoint;
-import org.opencv.core.Rect;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.core.*;
 
@@ -78,10 +78,12 @@ public final class Main {
   public static boolean server;
   public static List<CameraConfig> cameraConfigs = new ArrayList<>();
   private static final Object ImgLock = new Object();
-  public static final double TARGET_WIDTH = 8.0; // inches       TODO: Change all dimensions
-  public static final double TARGET_HEIGHT = 15.3; // inches
-  public static final double TARGET_STRIP_WIDTH = 2.0; // inches
-
+  private static final double TARGET_STRIP_WIDTH = 2.0;             // inches
+  private static final double TARGET_STRIP_LENGTH = 5.5;            // inches
+  private static final double TARGET_STRIP_CORNER_OFFSET = 4.0;     // inches
+  private static final double TARGET_STRIP_ROT = Math.toRadians(14.5);
+  public static double cos_a = Math.cos(TARGET_STRIP_ROT);
+  public static double sin_a = Math.sin(TARGET_STRIP_ROT);
 
   private Main() {
   }
@@ -205,10 +207,74 @@ public final class Main {
     }
   }
 
+  public static ArrayList<Point> get_outside_corners_single(List<Point> contour, boolean isLeft){
+    double y_ave = 0.0;
+    for (Point cnr : contour) {
+      y_ave += cnr.y;
+    }
+    y_ave /= contour.size(); 
+
+    ArrayList<Point> corners = new ArrayList<Point>();
+
+    if(isLeft){
+      for (Point cnr : contour) {
+        //larger in y (lower in picture) at index 1
+       int index = 0;
+        if(cnr.y > y_ave)
+          index = 1;
+        else 
+          index = 0;
+        if (corners.get(index) == null || cnr.x < corners.get(index).x){
+            corners.set(index, cnr);
+        }
+      }
+    }else{
+      for (Point cnr : contour) {
+        //larger in y (lower in picture) at index 1
+       int index = 0;
+        if(cnr.y > y_ave)
+          index = 1;
+        else 
+          index = 0;
+        if (corners.get(index) == null || cnr.x > corners.get(index).x){
+            corners.set(index, cnr);
+        }
+      }
+    }
+    return corners;
+  }
+
   /**
    * Main.
    */
   public static void main(String... args) {
+    
+     //gets the values a left and right strip should have
+     Point3 pt = new Point3(TARGET_STRIP_CORNER_OFFSET, 0, 0);
+     ArrayList<Point3> right_strip = new ArrayList<Point3>();
+     right_strip.add(pt);
+     pt.x += TARGET_STRIP_WIDTH * cos_a;
+     pt.y += TARGET_STRIP_WIDTH * sin_a;
+     right_strip.add(pt);
+     pt.x += TARGET_STRIP_LENGTH * sin_a;
+     pt.y -= TARGET_STRIP_LENGTH * cos_a;
+     right_strip.add(pt);
+     pt.x -= TARGET_STRIP_WIDTH * cos_a;
+     pt.y -= TARGET_STRIP_WIDTH * sin_a;
+     right_strip.add(pt);
+
+     //mirror for the left strip
+     ArrayList<Point3> left_strip = new ArrayList<Point3>();
+     for (Point3 ptR : right_strip) {
+       Point3 ptL = new Point3(-ptR.x, ptR.y, ptR.z);
+       left_strip.add(ptL);
+     }
+
+     MatOfPoint3f outside_target_coords = new MatOfPoint3f(
+     left_strip.get(2), left_strip.get(1), right_strip.get(1), right_strip.get(2));
+     //left bottom, left top, right top, right bottom
+     System.out.println(outside_target_coords);
+    
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -247,8 +313,11 @@ public final class Main {
       //    System.out.println("Found a ball!");
       //    }  
       // }  
-
+      
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
+        
+       
+
         if (!execThread.filterContoursOutput().isEmpty()) {
           
             //get the biggest contour  
@@ -266,12 +335,19 @@ public final class Main {
                 } 
                 contours.set(j+1,key);
             } 
-            MatOfPoint target_contour = contours.get(contours.size()-1);
-            if(target_contour != null){
-              Point[] points = target_contour.toArray();
-              Arrays.sort(points);
+            MatOfPoint cnt1 = contours.get(contours.size()-1);
+            MatOfPoint cnt2 = contours.get(contours.size()-2);
+            if(cnt1 != null && cnt1 != null){ //todo: target detection
+              List<Point> cnt_left = cnt1.toList();
+              List<Point> cnt_right = cnt2.toList();
+
+              ArrayList<Point> left = get_outside_corners_single(cnt_left, true);
+              ArrayList<Point> right = get_outside_corners_single(cnt_right, false);
+              MatOfPoint2f image_corners = new MatOfPoint2f(
+              left.get(1), left.get(0), right.get(0), right.get(1));
+                //[left_bottom, left_top, right_top, right_bottom]
+              boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners);
             }
-            Calib3d.solvePnP();
           }
           //more code here if ya want  
       }));
