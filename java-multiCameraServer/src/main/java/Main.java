@@ -21,7 +21,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.sun.tools.javac.code.Attribute.Array;
 
 import org.opencv.calib3d.Calib3d;
 import org.opencv.imgproc.Imgproc;
@@ -304,37 +303,39 @@ public final class Main {
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       System.out.println("Starting image processing on camera 0...");
-      //GripPipeline pipeline = new GripPipeline();
-
-      //class for code execution
-      //class ExecThread implements VisionRunner.Listener<GripPipeline>{
-      //  public void copyPipelineOutputs(GripPipeline arg0){
-      //  if (!filterContoursOutput().isEmpty()) {
-      //    System.out.println("Found a ball!");
-      //    }  
-      // }  
       
-      VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
-        
-       
+      //camera_matrix values output from camera calibration
+      Mat cameraMatrix= new Mat(3, 3, 0);
+      cameraMatrix.put(0, 0, 6.8534); cameraMatrix.put(0, 1, 0.); cameraMatrix.put(0, 2, 3.4641);
+      cameraMatrix.put(1, 0, 0.); cameraMatrix.put(1, 1, 6.8271); cameraMatrix.put(1, 2, 2.2728);
+      cameraMatrix.put(2, 0, 0.); cameraMatrix.put(2, 1, 0.); cameraMatrix.put(2, 2, 1.);
+      System.out.println("Camera matrix values: "+ cameraMatrix.dump());
 
+      //distortion_coefficients values output from camera calibration
+      MatOfDouble distCoeffs= new MatOfDouble(5, 1);
+      distCoeffs.put(0, 0, -8.3074); distCoeffs.put(1, 0, 1.3874); distCoeffs.put(2, 0, -5.1382);
+      distCoeffs.put(3, 0, 3.6797); distCoeffs.put(4, 0, 0.);
+      System.out.println("Distortion Coefficient values: "+ distCoeffs.dump());
+
+
+      VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
         if (!execThread.filterContoursOutput().isEmpty()) {
           
-            //get the biggest contour  
-            //TODO: Add check for shapes being rough 
+            //get the biggest contour
+            //TODO: Add check for shapes being rough
             List<MatOfPoint> contours = execThread.filterContoursOutput();
-            int n = contours.size(); 
-            for (int i=1; i<n; ++i) { 
-                MatOfPoint key = contours.get(i); 
+            int n = contours.size();
+            for (int i=1; i<n; ++i) {
+                MatOfPoint key = contours.get(i);
                 Rect rectKey = Imgproc.boundingRect(key);
                 int j = i-1;
 
                 while (j>=0 && Imgproc.boundingRect(contours.get(j)).area() > rectKey.area()) { 
                   contours.set(j+1, contours.get(j));
-                  j = j-1; 
-                } 
+                  j = j-1;
+                }
                 contours.set(j+1,key);
-            } 
+            }
             MatOfPoint cnt1 = contours.get(contours.size()-1);
             MatOfPoint cnt2 = contours.get(contours.size()-2);
             if(cnt1 != null && cnt1 != null){ //todo: target detection
@@ -346,17 +347,20 @@ public final class Main {
               MatOfPoint2f image_corners = new MatOfPoint2f(
               left.get(1), left.get(0), right.get(0), right.get(1));
                 //[left_bottom, left_top, right_top, right_bottom]
-              boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners);
+              
+              Mat rvec = new Mat();
+              Mat tvec = new Mat();
+              boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners, cameraMatrix, distCoeffs, rvec, tvec);
             }
           }
-          //more code here if ya want  
+          //more code here if ya want
       }));
       visionThread.start();
     
-       /* 
+       /*
       VisionThread visionThread = new VisionThread(cameras.get(0),
               new GripPipeline(), pipeline -> {
-        ... 
+        ...
       });
        */
       //VisionThread visionThread = new VisionThread(cameras.get(0),
@@ -364,7 +368,7 @@ public final class Main {
         //if(!pipeline.filterContoursOutput().isEmpty()){
           //System.out.println("Found contours");
         //}
-      //});   
+      //});
       }
     // loop forever
     while(true){
