@@ -23,8 +23,8 @@ import java.util.Vector;
 public class TargetFinder{
     
     public void contour_center_width(MatOfPoint contour){
-        Rect r = Imgproc.boundingRect(camera_frame.filterContoursOutput().get(0));
-        x, y, w, h = cv2.boundingRect(contour);
+       // Rect r = Imgproc.boundingRect(camera_frame.filterContoursOutput().get(0));
+        //x, y, w, h = cv2.boundingRect(contour);
     }
     public void computeOutputValues(Mat rvec, Mat tvec){
         /*
@@ -46,20 +46,20 @@ public class TargetFinder{
         
         */
         
-        double x = tvec[0];
-        double z = tvec[2];
+        //double x = tvec[0];
+        //double z = tvec[2];
         
 
         // distance in the horizontal plane between camera and target
-        double distance = Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
+        //double distance = Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
        
         // horizontal angle between camera center line and target
-        double angle1 = Math.atan2(x,z);
+       // double angle1 = Math.atan2(x,z);
 
         Mat rot = new Mat();
         Calib3d.Rodrigues(rvec, rot);
         Mat rot_inv = rot.t();
-        Mat pzero_world = tvec* rot_inv;
+        //Mat pzero_world = tvec* rot_inv;
         //Calib3d.solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
     }
   }

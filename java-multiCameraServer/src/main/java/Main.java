@@ -4,6 +4,7 @@
 /* must be accompanied by the FIRST BSD license file in the root directory of */
 /* the project.                                                               */
 /*----------------------------------------------------------------------------*/
+import java.awt.SystemTray;
 import java.io.IOException;
 import java.nio.channels.NonReadableChannelException;
 import java.nio.file.Files;
@@ -247,7 +248,8 @@ public final class Main {
    * Main.
    */
   public static void main(String... args) {
-    
+    System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+
      //gets the values a left and right strip should have
      Point3 pt = new Point3(TARGET_STRIP_CORNER_OFFSET, 0, 0);
      ArrayList<Point3> right_strip = new ArrayList<Point3>();
@@ -268,11 +270,14 @@ public final class Main {
        Point3 ptL = new Point3(-ptR.x, ptR.y, ptR.z);
        left_strip.add(ptL);
      }
-
+     System.out.println("Left: " + left_strip.toString() + "Right: " + right_strip.toString());
+     System.out.println("What it should be giving me: " + 
+     left_strip.get(2).toString() + left_strip.get(1).toString() + 
+     right_strip.get(1).toString() + right_strip.get(2).toString());
      MatOfPoint3f outside_target_coords = new MatOfPoint3f(
      left_strip.get(2), left_strip.get(1), right_strip.get(1), right_strip.get(2));
      //left bottom, left top, right top, right bottom
-     System.out.println(outside_target_coords);
+     System.out.println(outside_target_coords.toString());
     
     if (args.length > 0) {
       configFile = args[0];
@@ -312,15 +317,16 @@ public final class Main {
       System.out.println("Camera matrix values: "+ cameraMatrix.dump());
 
       //distortion_coefficients values output from camera calibration
-      MatOfDouble distCoeffs= new MatOfDouble(5, 1);
-      distCoeffs.put(0, 0, -8.3074); distCoeffs.put(1, 0, 1.3874); distCoeffs.put(2, 0, -5.1382);
-      distCoeffs.put(3, 0, 3.6797); distCoeffs.put(4, 0, 0.);
+      MatOfDouble distCoeffs= new MatOfDouble(1, 5);
+      distCoeffs.put(0, 0, -8.3074); distCoeffs.put(0, 1, 1.3874); distCoeffs.put(0, 2, -5.1382);
+      distCoeffs.put(0, 3, 3.6797); distCoeffs.put(0, 4, 0);
       System.out.println("Distortion Coefficient values: "+ distCoeffs.dump());
 
 
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
+        System.out.println("Vision thread running! Proceeding to process...");
         if (!execThread.filterContoursOutput().isEmpty()) {
-          
+            System.out.println("Found a contour!");
             //get the biggest contour
             //TODO: Add check for shapes being rough
             List<MatOfPoint> contours = execThread.filterContoursOutput();
@@ -351,6 +357,7 @@ public final class Main {
               Mat rvec = new Mat();
               Mat tvec = new Mat();
               boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners, cameraMatrix, distCoeffs, rvec, tvec);
+              System.out.println("SolvePNP ran? " + retval);
             }
           }
           //more code here if ya want

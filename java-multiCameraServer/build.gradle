@@ -15,14 +15,15 @@ repositories {
     }
 }
 
+
 dependencies {
     compile 'com.google.code.gson:gson:2.8.5'
 
-    compile files('libs/wpiutil.jar')
-    compile files('libs/ntcore.jar')
-    compile files('libs/cscore.jar')
-    compile files('libs/cameraserver.jar')
-    compile files('libs/opencv-344.jar')
+    compile files('lib/wpiutil.jar')
+    compile files('lib/ntcore.jar')
+    compile files('lib/cscore.jar')
+    compile files('lib/cameraserver.jar')
+    compile files('lib/opencv-344.jar')
 
 
 }
