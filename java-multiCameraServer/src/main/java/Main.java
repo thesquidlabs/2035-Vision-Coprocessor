@@ -212,35 +212,38 @@ public final class Main {
     for (Point cnr : contour) {
       y_ave += cnr.y;
     }
-    y_ave /= contour.size(); 
+    y_ave /= contour.size();
 
     ArrayList<Point> corners = new ArrayList<Point>();
-
+    Point dummyPoint = new Point();
+    corners.add(dummyPoint); corners.add(dummyPoint); //populates with dummy points
     if(isLeft){
+      int index = 0;
       for (Point cnr : contour) {
         //larger in y (lower in picture) at index 1
-       int index = 0;
         if(cnr.y > y_ave)
           index = 1;
-        else 
+        else
           index = 0;
         if (corners.get(index) == null || cnr.x < corners.get(index).x){
             corners.set(index, cnr);
         }
       }
+
     }else{
+      int index = 0;
       for (Point cnr : contour) {
         //larger in y (lower in picture) at index 1
-       int index = 0;
         if(cnr.y > y_ave)
           index = 1;
-        else 
+        else
           index = 0;
         if (corners.get(index) == null || cnr.x > corners.get(index).x){
             corners.set(index, cnr);
         }
       }
     }
+    System.out.println("Corners: " + corners);
     return corners;
   }
 
@@ -271,8 +274,8 @@ public final class Main {
        left_strip.add(ptL);
      }
      System.out.println("Left: " + left_strip.toString() + "Right: " + right_strip.toString());
-     System.out.println("What it should be giving me: " + 
-     left_strip.get(2).toString() + left_strip.get(1).toString() + 
+     System.out.println("What it should be giving me: " +
+     left_strip.get(2).toString() + left_strip.get(1).toString() +
      right_strip.get(1).toString() + right_strip.get(2).toString());
      MatOfPoint3f outside_target_coords = new MatOfPoint3f(
      left_strip.get(2), left_strip.get(1), right_strip.get(1), right_strip.get(2));
@@ -311,22 +314,22 @@ public final class Main {
       
       //camera_matrix values output from camera calibration
       Mat cameraMatrix= new Mat(3, 3, 0);
-      cameraMatrix.put(0, 0, 6.8534); cameraMatrix.put(0, 1, 0.); cameraMatrix.put(0, 2, 3.4641);
-      cameraMatrix.put(1, 0, 0.); cameraMatrix.put(1, 1, 6.8271); cameraMatrix.put(1, 2, 2.2728);
+      cameraMatrix.put(0, 0, 3.40); cameraMatrix.put(0, 1, 0.); cameraMatrix.put(0, 2, 1.68);
+      cameraMatrix.put(1, 0, 0.); cameraMatrix.put(1, 1, 3.39); cameraMatrix.put(1, 2, 1.21);
       cameraMatrix.put(2, 0, 0.); cameraMatrix.put(2, 1, 0.); cameraMatrix.put(2, 2, 1.);
       System.out.println("Camera matrix values: "+ cameraMatrix.dump());
 
       //distortion_coefficients values output from camera calibration
-      MatOfDouble distCoeffs= new MatOfDouble(1, 5);
-      distCoeffs.put(0, 0, -8.3074); distCoeffs.put(0, 1, 1.3874); distCoeffs.put(0, 2, -5.1382);
-      distCoeffs.put(0, 3, 3.6797); distCoeffs.put(0, 4, 0);
+      MatOfDouble distCoeffs= new MatOfDouble(-5.78, -1.08, 2.32, 3.31, 0);
+      //distCoeffs.put(0, 0, -8.3074); distCoeffs.put(0, 1, 1.3874); distCoeffs.put(0, 2, -5.1382);
+      //distCoeffs.put(0, 3, 3.6797); distCoeffs.put(0, 4, 0);
       System.out.println("Distortion Coefficient values: "+ distCoeffs.dump());
 
 
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
         System.out.println("Vision thread running! Proceeding to process...");
-        if (!execThread.filterContoursOutput().isEmpty()) {
-            System.out.println("Found a contour!");
+        if (execThread.filterContoursOutput().size() > 1 ){
+            System.out.println("Found " + execThread.filterContoursOutput().size() + " contours!");
             //get the biggest contour
             //TODO: Add check for shapes being rough
             List<MatOfPoint> contours = execThread.filterContoursOutput();
@@ -358,6 +361,9 @@ public final class Main {
               Mat tvec = new Mat();
               boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners, cameraMatrix, distCoeffs, rvec, tvec);
               System.out.println("SolvePNP ran? " + retval);
+              //System.out.println("rvec: " + rvec.dump() + " tvec: " + tvec.dump());
+              if (retval)
+                TargetFinder.computeOutputValues(rvec, tvec);
             }
           }
           //more code here if ya want
