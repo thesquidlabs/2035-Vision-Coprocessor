@@ -225,8 +225,11 @@ public final class Main {
           index = 1;
         else
           index = 0;
-        if (corners.get(index) == null || cnr.x < corners.get(index).x){
+        if (corners.get(index).x == 0 && corners.get(index).y == 0){
             corners.set(index, cnr);
+        }
+        else if(cnr.x < corners.get(index).x){
+          corners.set(index, cnr);
         }
       }
 
@@ -256,17 +259,21 @@ public final class Main {
      //gets the values a left and right strip should have
      Point3 pt = new Point3(TARGET_STRIP_CORNER_OFFSET, 0, 0);
      ArrayList<Point3> right_strip = new ArrayList<Point3>();
+     System.out.println("x = " + pt.x + ", y = "+ pt.y);
      right_strip.add(pt);
      pt.x += TARGET_STRIP_WIDTH * cos_a;
      pt.y += TARGET_STRIP_WIDTH * sin_a;
+     System.out.println("x = " + pt.x + ", y = "+ pt.y);
      right_strip.add(pt);
      pt.x += TARGET_STRIP_LENGTH * sin_a;
      pt.y -= TARGET_STRIP_LENGTH * cos_a;
+     System.out.println("x = " + pt.x + ", y = "+ pt.y);
      right_strip.add(pt);
      pt.x -= TARGET_STRIP_WIDTH * cos_a;
      pt.y -= TARGET_STRIP_WIDTH * sin_a;
+     System.out.println("x = " + pt.x + ", y = "+ pt.y);
      right_strip.add(pt);
-
+    System.out.println(right_strip.toString());
      //mirror for the left strip
      ArrayList<Point3> left_strip = new ArrayList<Point3>();
      for (Point3 ptR : right_strip) {
@@ -280,7 +287,7 @@ public final class Main {
      MatOfPoint3f outside_target_coords = new MatOfPoint3f(
      left_strip.get(2), left_strip.get(1), right_strip.get(1), right_strip.get(2));
      //left bottom, left top, right top, right bottom
-     System.out.println(outside_target_coords.toString());
+     System.out.println("Outside_target_coords: " + outside_target_coords.dump());
     
     if (args.length > 0) {
       configFile = args[0];
@@ -327,7 +334,6 @@ public final class Main {
 
 
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
-        System.out.println("Vision thread running! Proceeding to process...");
         if (execThread.filterContoursOutput().size() > 1 ){
             System.out.println("Found " + execThread.filterContoursOutput().size() + " contours!");
             //get the biggest contour
