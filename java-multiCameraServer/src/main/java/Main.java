@@ -82,8 +82,14 @@ public final class Main {
   private static final double TARGET_STRIP_LENGTH = 5.5;            // inches
   private static final double TARGET_STRIP_CORNER_OFFSET = 4.0;     // inches
   private static final double TARGET_STRIP_ROT = Math.toRadians(14.5);
+  public static final int CAMERA_WIDTH = 320;
+  public static final int CAMERA_HEIGHT = 240;
+  public static final double H_FOV = Math.toRadians(58.5);
+  public static final double V_FOV = Math.toRadians(45.6);
   public static double cos_a = Math.cos(TARGET_STRIP_ROT);
   public static double sin_a = Math.sin(TARGET_STRIP_ROT);
+  public static final boolean USE_CALIBRATED_IMAGEMAT = true;
+  public static MatOfDouble distCoeffs;
 
   private Main() {
   }
@@ -250,29 +256,41 @@ public final class Main {
     return corners;
   }
 
+  public static Point findCenter(List<Point> cnt){
+    int aveX = 0;
+    int aveY = 0;
+    for (Point pt : cnt){
+        aveX += pt.x;
+        aveY += pt.y;
+    }
+    aveX /= cnt.size();
+    aveY /= cnt.size();
+    Point center = new Point(aveX, aveY);
+    return center;
+  }
+
   /**
    * Main.
    */
   public static void main(String... args) {
     System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-
      //gets the values a left and right strip should have
      Point3 pt = new Point3(TARGET_STRIP_CORNER_OFFSET, 0, 0);
      ArrayList<Point3> right_strip = new ArrayList<Point3>();
      System.out.println("x = " + pt.x + ", y = "+ pt.y);
-     right_strip.add(pt);
+     right_strip.add(new Point3(pt.x, pt.y, pt.z));
      pt.x += TARGET_STRIP_WIDTH * cos_a;
      pt.y += TARGET_STRIP_WIDTH * sin_a;
      System.out.println("x = " + pt.x + ", y = "+ pt.y);
-     right_strip.add(pt);
+     right_strip.add(new Point3(pt.x, pt.y, pt.z));
      pt.x += TARGET_STRIP_LENGTH * sin_a;
      pt.y -= TARGET_STRIP_LENGTH * cos_a;
      System.out.println("x = " + pt.x + ", y = "+ pt.y);
-     right_strip.add(pt);
+     right_strip.add(new Point3(pt.x, pt.y, pt.z));
      pt.x -= TARGET_STRIP_WIDTH * cos_a;
      pt.y -= TARGET_STRIP_WIDTH * sin_a;
      System.out.println("x = " + pt.x + ", y = "+ pt.y);
-     right_strip.add(pt);
+     right_strip.add(new Point3(pt.x, pt.y, pt.z));
     System.out.println(right_strip.toString());
      //mirror for the left strip
      ArrayList<Point3> left_strip = new ArrayList<Point3>();
@@ -289,6 +307,8 @@ public final class Main {
      //left bottom, left top, right top, right bottom
      System.out.println("Outside_target_coords: " + outside_target_coords.dump());
     
+
+
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -314,24 +334,26 @@ public final class Main {
       cameras.add(startCamera(cameraConfig));
     }
 
-    
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       System.out.println("Starting image processing on camera 0...");
       
-      //camera_matrix values output from camera calibration
-      Mat cameraMatrix= new Mat(3, 3, 0);
-      cameraMatrix.put(0, 0, 3.40); cameraMatrix.put(0, 1, 0.); cameraMatrix.put(0, 2, 1.68);
-      cameraMatrix.put(1, 0, 0.); cameraMatrix.put(1, 1, 3.39); cameraMatrix.put(1, 2, 1.21);
-      cameraMatrix.put(2, 0, 0.); cameraMatrix.put(2, 1, 0.); cameraMatrix.put(2, 2, 1.);
+      Mat cameraMatrix= new Mat(3, 3, 6);
+      if(USE_CALIBRATED_IMAGEMAT){  //use calibrated data
+        cameraMatrix.put(0, 0, 340); cameraMatrix.put(0, 1, 0.); cameraMatrix.put(0, 2, 166.8);   //camera_matrix values output from camera calibration
+        cameraMatrix.put(1, 0, 0.); cameraMatrix.put(1, 1, 340.7); cameraMatrix.put(1, 2, 118);
+        cameraMatrix.put(2, 0, 0.); cameraMatrix.put(2, 1, 0.); cameraMatrix.put(2, 2, 1.);
+        distCoeffs= new MatOfDouble(0.0490448, -0.2692084, -0.0011227, 0.0004736, 0);
+        //distCoeffs= new MatOfDouble(-5.78, -1.08, 2.32, 3.31, 0); //distortion_coefficients values output from camera calibration
+      }else{ //approximate values
+        double focal_x = (CAMERA_WIDTH/2)/(Math.tan(H_FOV/2));
+        double focal_y = (CAMERA_WIDTH/2)/(Math.tan(V_FOV/2));
+        cameraMatrix.put(0, 0, focal_x, 0, CAMERA_WIDTH / 2.0, 0, focal_y, CAMERA_HEIGHT / 2.0, 0, 0, 1);
+        distCoeffs= new MatOfDouble(0, 0, 0, 0, 0);
+      }
+
       System.out.println("Camera matrix values: "+ cameraMatrix.dump());
-
-      //distortion_coefficients values output from camera calibration
-      MatOfDouble distCoeffs= new MatOfDouble(-5.78, -1.08, 2.32, 3.31, 0);
-      //distCoeffs.put(0, 0, -8.3074); distCoeffs.put(0, 1, 1.3874); distCoeffs.put(0, 2, -5.1382);
-      //distCoeffs.put(0, 3, 3.6797); distCoeffs.put(0, 4, 0);
       System.out.println("Distortion Coefficient values: "+ distCoeffs.dump());
-
 
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
         if (execThread.filterContoursOutput().size() > 1 ){
@@ -353,10 +375,19 @@ public final class Main {
             }
             MatOfPoint cnt1 = contours.get(contours.size()-1);
             MatOfPoint cnt2 = contours.get(contours.size()-2);
-            if(cnt1 != null && cnt1 != null){ //todo: target detection
-              List<Point> cnt_left = cnt1.toList();
-              List<Point> cnt_right = cnt2.toList();
+            if(cnt1 != null && cnt2 != null){ //todo: target detection
 
+              List<Point> cnt_left;
+              List<Point> cnt_right;
+              //tell tell which strip is left and which is right
+              if(findCenter(cnt1.toList()).x < findCenter(cnt2.toList()).x){
+                 cnt_left= cnt1.toList();
+                 cnt_right= cnt2.toList();
+              }else{
+                cnt_left= cnt2.toList();
+                cnt_right= cnt1.toList();
+              }
+              
               ArrayList<Point> left = get_outside_corners_single(cnt_left, true);
               ArrayList<Point> right = get_outside_corners_single(cnt_right, false);
               MatOfPoint2f image_corners = new MatOfPoint2f(
@@ -368,8 +399,10 @@ public final class Main {
               boolean retval = Calib3d.solvePnP(outside_target_coords, image_corners, cameraMatrix, distCoeffs, rvec, tvec);
               System.out.println("SolvePNP ran? " + retval);
               //System.out.println("rvec: " + rvec.dump() + " tvec: " + tvec.dump());
-              if (retval)
-                TargetFinder.computeOutputValues(rvec, tvec);
+              if (retval){
+                RelativePose pose = TargetFinder.computeOutputValues(rvec, tvec);
+                System.out.println(pose.toString());
+              }
             }
           }
           //more code here if ya want

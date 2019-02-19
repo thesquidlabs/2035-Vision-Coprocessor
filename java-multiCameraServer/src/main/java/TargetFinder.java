@@ -27,11 +27,7 @@ public class TargetFinder{
     public static final double CAMERA_OFFSET_X = 0;
     public static final double CAMERA_OFFSET_Z = 0;
 
-    public void contour_center_width(MatOfPoint contour){
-       // Rect r = Imgproc.boundingRect(camera_frame.filterContoursOutput().get(0));
-        //x, y, w, h = cv2.boundingRect(contour);
-    }
-    public static void computeOutputValues(Mat rvec, Mat tvec){
+    public static RelativePose computeOutputValues(Mat rvec, Mat tvec){
         /*
             *Diagram of Variables*
 
@@ -39,11 +35,11 @@ public class TargetFinder{
                |x
            ╔═══╗
            ║cam║-------- z
-           ╚═══╝ \a1|
+           ╚═══╝ \hd|
                   \ |
-          distance \
+          distance \|
                     \__ |
-                     \a2|
+                     \oy|
                       \ |
                      ╔══════╗
                      ║target║
@@ -54,28 +50,45 @@ public class TargetFinder{
         double x = tvec.get(0, 0)[0] + CAMERA_OFFSET_X; //for some reason get outputs a double[] of length 1, so just get the first value
         double z = Math.sin(CAMERA_TILT) *  tvec.get(1, 0)[0] + Math.cos(CAMERA_TILT) * tvec.get(2,0)[0] +  CAMERA_OFFSET_Z; //ditto for here, but factor in tilt offset
         
-        System.out.println("x = " + x + " z = " + z);
 
-        // distance in the horizontal plane between camera and target
+        //get the distance in the horizontal plane between camera and target
         double distance = Math.sqrt(Math.pow(x,2) + Math.pow(z,2));
        
-        System.out.println("distance = " + distance);
 
-
-        // horizontal angle between camera center line and target
-        double angle1 = Math.atan2(x,z);
-
-        System.out.println("angle1 = " + angle1);
+        //get the horizontal angle between camera center line and target
+        double heading = Math.atan2(x,z);
 
 
         Mat rot = new Mat();
-        Calib3d.Rodrigues(rvec, rot);
+        Calib3d.Rodrigues(rvec, rot); //unpacks rot matrix from rved
         System.out.println("rot = " + rot.dump());
 
-        Mat rot_inv = rot.t();
-        System.out.println("rot_inv = " + rot_inv.dump());
+        double[] angles = rotToEulerAngles(rot); //gets euler angles of object from rot matrix
+        double objectYaw = angles[1];
         
-        //Mat pzero_world = -tvec* rot_inv;
-        //Calib3d.solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+        return new RelativePose(heading, distance, objectYaw);
     }
-  }
+
+    private static double[] rotToEulerAngles(Mat rotationMatrix)
+    {
+        double r00 = rotationMatrix.get(0, 0)[0];
+        double r10 = rotationMatrix.get(1, 0)[0];
+        double sy = Math.sqrt(r00 * r00 + r10 * r10);
+        double x, y, z;
+        if (sy >= 1e-6)
+        {
+            x = Math.atan2(rotationMatrix.get(2, 1)[0], rotationMatrix.get(2, 2)[0]);
+            y = Math.atan2(-rotationMatrix.get(2, 0)[0], sy);
+            z = Math.atan2(r10, r00);
+        }
+        else
+        {
+            x = Math.atan2(-rotationMatrix.get(1, 2)[0], rotationMatrix.get(1, 1)[0]);
+            y = Math.atan2(-rotationMatrix.get(2, 0)[0], sy);
+            z = 0;
+        }
+        return new double[] { Math.toDegrees(x), Math.toDegrees(y), Math.toDegrees(z) };
+    }
+}
+
+
