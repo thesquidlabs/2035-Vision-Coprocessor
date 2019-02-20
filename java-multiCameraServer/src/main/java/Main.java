@@ -1,3 +1,4 @@
+
 /*----------------------------------------------------------------------------*/
 /* Copyright (c) 2018 FIRST. All Rights Reserved.                             */
 /* Open Source Software - may be modified and shared by FRC teams. The code   */
@@ -30,6 +31,8 @@ import org.opencv.core.*;
 import edu.wpi.cscore.UsbCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionRunner;
@@ -84,12 +87,23 @@ public final class Main {
   private static final double TARGET_STRIP_ROT = Math.toRadians(14.5);
   public static final int CAMERA_WIDTH = 320;
   public static final int CAMERA_HEIGHT = 240;
+  public static final int NT_WAIT_COUNT = 5;
   public static final double H_FOV = Math.toRadians(58.5);
   public static final double V_FOV = Math.toRadians(45.6);
   public static double cos_a = Math.cos(TARGET_STRIP_ROT);
   public static double sin_a = Math.sin(TARGET_STRIP_ROT);
   public static final boolean USE_CALIBRATED_IMAGEMAT = true;
   public static MatOfDouble distCoeffs;
+  
+  static NetworkTableEntry objectSeen;
+  static NetworkTableEntry headingEntry;
+  static NetworkTableEntry distanceEntry;
+  static NetworkTableEntry objecyYawEntry;
+  static ArrayList<Double> headingList;
+  static ArrayList<Double> distanceList;
+  static ArrayList<Double> objectYawList;
+  static double hAve, dAve, yAve;
+
 
   private Main() {
   }
@@ -274,6 +288,13 @@ public final class Main {
    */
   public static void main(String... args) {
     System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+
+    headingList = new ArrayList<>();
+    distanceList = new ArrayList<>();
+    objectYawList = new ArrayList<>();
+
+    hAve = 0; dAve = 0; yAve = 0;
+
      //gets the values a left and right strip should have
      Point3 pt = new Point3(TARGET_STRIP_CORNER_OFFSET, 0, 0);
      ArrayList<Point3> right_strip = new ArrayList<Point3>();
@@ -327,6 +348,12 @@ public final class Main {
       System.out.println("Setting up NetworkTables client for team " + team);
       ntinst.startClientTeam(team);
     }
+    NetworkTable values = ntinst.getTable("values");
+    objectSeen = values.getEntry("object");
+    headingEntry = values.getEntry("heading");
+    distanceEntry = values.getEntry("distance");
+    objecyYawEntry = values.getEntry("objectYaw");
+
 
     // start cameras
     List<VideoSource> cameras = new ArrayList<>();
@@ -357,6 +384,7 @@ public final class Main {
 
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
         if (execThread.filterContoursOutput().size() > 1 ){
+            objectSeen.setBoolean(true);
             System.out.println("Found " + execThread.filterContoursOutput().size() + " contours!");
             //get the biggest contour
             //TODO: Add check for shapes being rough
@@ -401,9 +429,31 @@ public final class Main {
               //System.out.println("rvec: " + rvec.dump() + " tvec: " + tvec.dump());
               if (retval){
                 RelativePose pose = TargetFinder.computeOutputValues(rvec, tvec);
-                System.out.println(pose.toString());
+                System.out.println(pose.toString()); 
+                
+                headingList.add(pose.heading);
+                distanceList.add(pose.distance);
+                objectYawList.add(pose.objectYaw);
+                hAve += pose.heading;
+                dAve += pose.distance;
+                yAve += pose.objectYaw;
+
+                if(headingList.size() >= NT_WAIT_COUNT){ //gets the average of a set amount of values
+                  hAve /= headingList.size();
+                  dAve /= distanceList.size();
+                  yAve /= objectYawList.size();
+                  System.out.println("Averages: "+  hAve + ", " + dAve + ", " + yAve);
+                  //push to networktables
+                  headingEntry.setDouble(hAve);
+                  distanceEntry.setDouble(dAve);
+                  objecyYawEntry.setDouble(yAve);
+                  hAve = 0; dAve = 0; yAve = 0; //reset the averages
+                  headingList.clear(); distanceList.clear(); objectYawList.clear(); //clear the lists
+                }
               }
             }
+          }else{
+            objectSeen.setBoolean(false);
           }
           //more code here if ya want
       }));
