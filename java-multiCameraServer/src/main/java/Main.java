@@ -5,6 +5,7 @@
 /* must be accompanied by the FIRST BSD license file in the root directory of */
 /* the project.                                                               */
 /*----------------------------------------------------------------------------*/
+import java.awt.Color;
 import java.awt.SystemTray;
 import java.io.IOException;
 import java.nio.channels.NonReadableChannelException;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 import javax.lang.model.util.ElementScanner6;
 
@@ -28,6 +30,8 @@ import org.opencv.calib3d.Calib3d;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.core.*;
 
+import edu.wpi.cscore.CvSink;
+import edu.wpi.cscore.CvSource;
 import edu.wpi.cscore.UsbCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.first.cameraserver.CameraServer;
@@ -381,10 +385,24 @@ public final class Main {
 
       System.out.println("Camera matrix values: "+ cameraMatrix.dump());
       System.out.println("Distortion Coefficient values: "+ distCoeffs.dump());
+      
+      CvSink cvSink = CameraServer.getInstance().getVideo();
+      CvSource outputStream = CameraServer.getInstance().putVideo("Telemetry", 320, 240);
+      Mat source = new Mat();
+      Point imageCenter = new Point(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2);
 
+      //Thread for vision processing
       VisionThread visionThread = new VisionThread(new VisionRunner<GripPipeline>(cameras.get(0),new GripPipeline(), execThread -> {
+        
+        cvSink.grabFrame(source);
+        //make a crosshair
+        Imgproc.line(source, new Point(imageCenter.x, imageCenter.y+5), new Point(imageCenter.x, imageCenter.y-5), new Scalar(255,255,255), 2);
+        Imgproc.line(source, new Point(imageCenter.x+5, imageCenter.y), new Point(imageCenter.x-5, imageCenter.y), new Scalar(255,255,255), 2);
+
+
         if (execThread.filterContoursOutput().size() > 1 ){
             objectSeen.setBoolean(true);
+
             System.out.println("Found " + execThread.filterContoursOutput().size() + " contours!");
             //get the biggest contour
             //TODO: Add check for shapes being rough
@@ -403,23 +421,35 @@ public final class Main {
             }
             MatOfPoint cnt1 = contours.get(contours.size()-1);
             MatOfPoint cnt2 = contours.get(contours.size()-2);
-            if(cnt1 != null && cnt2 != null){ //todo: target detection
+            if(cnt1 != null && cnt2 != null){
 
-              List<Point> cnt_left;
-              List<Point> cnt_right;
+              MatOfPoint cnt_left;
+              MatOfPoint cnt_right;
               //tell tell which strip is left and which is right
               if(findCenter(cnt1.toList()).x < findCenter(cnt2.toList()).x){
-                 cnt_left= cnt1.toList();
-                 cnt_right= cnt2.toList();
+                 cnt_left= cnt1;
+                 cnt_right= cnt2;
               }else{
-                cnt_left= cnt2.toList();
-                cnt_right= cnt1.toList();
+                cnt_left = cnt2;
+                cnt_right= cnt1;
               }
               
-              ArrayList<Point> left = get_outside_corners_single(cnt_left, true);
-              ArrayList<Point> right = get_outside_corners_single(cnt_right, false);
+              ArrayList<Point> left = get_outside_corners_single(cnt_left.toList(), true);
+              ArrayList<Point> right = get_outside_corners_single(cnt_right.toList(), false);
+              //draw lines on telemetry
+
+              Imgproc.line(source, left.get(1), left.get(0), new Scalar(255,0,0), 2);
+              Imgproc.line(source, left.get(0), right.get(0), new Scalar(255,0,0), 2);
+              Imgproc.line(source, right.get(0), right.get(1), new Scalar(255,0,0), 2);
+              Imgproc.line(source, right.get(1), left.get(1), new Scalar(255,0,0), 2);
+
+              Point targetCenter = new Point((left.get(0).x + right.get(0).x)/2, (left.get(0).y + left.get(1).y)/2);
+              Imgproc.line(source, imageCenter, targetCenter, new Scalar(0,0,255), 2);
+
+
               MatOfPoint2f image_corners = new MatOfPoint2f(
               left.get(1), left.get(0), right.get(0), right.get(1));
+              
                 //[left_bottom, left_top, right_top, right_bottom]
               
               Mat rvec = new Mat();
@@ -429,7 +459,7 @@ public final class Main {
               //System.out.println("rvec: " + rvec.dump() + " tvec: " + tvec.dump());
               if (retval){
                 RelativePose pose = TargetFinder.computeOutputValues(rvec, tvec);
-                System.out.println(pose.toString()); 
+                System.out.println(pose.toString());
                 
                 headingList.add(pose.heading);
                 distanceList.add(pose.distance);
@@ -443,6 +473,7 @@ public final class Main {
                   dAve /= distanceList.size();
                   yAve /= objectYawList.size();
                   System.out.println("Averages: "+  hAve + ", " + dAve + ", " + yAve);
+                  //update camera
                   //push to networktables
                   headingEntry.setDouble(hAve);
                   distanceEntry.setDouble(dAve);
@@ -450,11 +481,17 @@ public final class Main {
                   hAve = 0; dAve = 0; yAve = 0; //reset the averages
                   headingList.clear(); distanceList.clear(); objectYawList.clear(); //clear the lists
                 }
+                //add telemetry values
+                Imgproc.putText(source, "Gracious Professionalism = " + Math.toDegrees(Math.random()) + "%", new Point(0,-14), 1, 1, new Scalar(0, 255, 0));
+                Imgproc.putText(source, "Heading = " + Math.round(pose.heading) + " degrees", new Point(0,CAMERA_HEIGHT - 38), 1, 1, new Scalar(0, 255, 0));
+                Imgproc.putText(source, "Distance = " + Math.round(pose.distance) + " in", new Point(0,CAMERA_HEIGHT - 24), 1, 1, new Scalar(0, 255, 0));
+                Imgproc.putText(source, "Obj Yaw = " + Math.round(pose.objectYaw) + " degrees ", new Point(0,CAMERA_HEIGHT - 10), 1, 1, new Scalar(0, 255, 0));
               }
             }
           }else{
             objectSeen.setBoolean(false);
           }
+          outputStream.putFrame(source);
           //more code here if ya want
       }));
       visionThread.start();
